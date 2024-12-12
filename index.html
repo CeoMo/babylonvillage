@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Babylon.js Village with Creative Changes</title>
+    <!-- Babylon.js Core Library -->
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <!-- Babylon.js Loaders for glTF and OBJ -->
+    <script src="https://cdn.babylonjs.com/loaders/babylon.glTF2FileLoader.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylon.objFileLoader.js"></script>
+    <!-- Babylon.js Materials Library for WaterMaterial -->
+    <script src="https://cdn.babylonjs.com/materialsLibrary/babylonjs.materials.min.js"></script>
+    <!-- Babylon.js GLTF Serializer -->
+    <script src="https://cdn.babylonjs.com/serializers/babylon.glTFSerializer.js"></script>
+    <style>
+        /* Style for control buttons */
+        .control-button {
+            position: absolute;
+            left: 20px;
+            padding: 10px 20px;
+            font-size: 14px;
+            z-index: 10;
+            margin-top: 10px;
+            cursor: pointer;
+            background-color: #ffffffaa;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        /* Positioning each button with increasing top margin */
+        #downloadButton { top: 20px; }
+        #toggleFog { top: 60px; }
+        #toggleDayNight { top: 100px; }
+        #toggleWater { top: 140px; }
+        #toggleSphere { top: 180px; }
+        #toggleSkybox { top: 220px; }
+    </style>
+</head>
+<body>
+    <!-- Canvas Element -->
+    <canvas id="renderCanvas" style="width: 100%; height: 100%;"></canvas>
+    <!-- Control Buttons -->
+    <button id="downloadButton" class="control-button">Download Stickman GLB</button>
+    <button id="toggleFog" class="control-button">Toggle Fog</button>
+    <button id="toggleDayNight" class="control-button">Toggle Day-Night Cycle</button>
+    <button id="toggleWater" class="control-button">Toggle Water Plane</button>
+    <button id="toggleSphere" class="control-button">Toggle Interactive Sphere</button>
+    <button id="toggleSkybox" class="control-button">Toggle Skybox</button>
+    
+    <script>
+        // Get the canvas element and initialize Babylon engine
+        const canvas = document.getElementById("renderCanvas");
+        const engine = new BABYLON.Engine(canvas, true);
+
+        // Variables to hold scene objects for toggling
+        let sun, waterPlane, interactiveSphere, skybox;
+        let dayNightCycleActive = true;
+
+        // Function to create the scene
+        const createScene = function () {
+            const scene = new BABYLON.Scene(engine);
+
+            // --------------------------
+            // Original Functionalities
+            // --------------------------
+
+            // 1. Camera Setup
+            const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 1.5, Math.PI / 2.2, 15, new BABYLON.Vector3(0, 0, 0));
+            camera.attachControl(canvas, true);
+
+            // 2. Hemispheric Light
+            const hemiLight = new BABYLON.HemisphericLight("hemiLight", new BABYLON.Vector3(1, 1, 0), scene);
+            hemiLight.intensity = 0.6;
+
+            // 3. Load Village Model
+            BABYLON.SceneLoader.ImportMeshAsync("", "https://assets.babylonjs.com/meshes/", "village.glb", scene)
+                .then((result) => {
+                    console.log("Village loaded:", result.meshes);
+                })
+                .catch((error) => {
+                    console.error("Error loading village.glb:", error);
+                });
+
+            // 4. Load and Animate Dude
+            BABYLON.SceneLoader.ImportMeshAsync("him", "./", "Dude3.babylon", scene)
+                .then((result) => {
+                    const dude = result.meshes[0];
+                    dude.scaling = new BABYLON.Vector3(0.012, 0.012, 0.012);
+                    dude.position = new BABYLON.Vector3(-6, 0, 0);
+                    dude.rotate(BABYLON.Axis.Y, BABYLON.Tools.ToRadians(-95), BABYLON.Space.LOCAL);
+
+                    const startRotation = dude.rotationQuaternion.clone();
+                    scene.beginAnimation(result.skeletons[0], 0, 100, true, 1.0);
+
+                    let distance = 0;
+                    const step = 0.015;
+                    let p = 0;
+
+                    const track = [
+                        { turn: 86, dist: 7 },
+                        { turn: -85, dist: 14.8 },
+                        { turn: -93, dist: 16.5 },
+                        { turn: 48, dist: 25.5 },
+                        { turn: -112, dist: 30.5 },
+                        { turn: -72, dist: 33.2 },
+                        { turn: 42, dist: 37.5 },
+                        { turn: -98, dist: 45.2 },
+                        { turn: 0, dist: 47 }
+                    ];
+
+                    scene.onBeforeRenderObservable.add(() => {
+                        dude.movePOV(0, 0, step);
+                        distance += step;
+
+                        if (distance > track[p].dist) {
+                            dude.rotate(BABYLON.Axis.Y, BABYLON.Tools.ToRadians(track[p].turn), BABYLON.Space.LOCAL);
+                            p += 1;
+                            if (p >= track.length) p = 0;
+                            if (p === 0) {
+                                distance = 0;
+                                dude.position = new BABYLON.Vector3(-6, 0, 0);
+                                dude.rotationQuaternion = startRotation.clone();
+                            }
+                        }
+                    });
+                })
+                .catch((error) => {
+                    console.error("Error loading Dude3.babylon:", error);
+                });
+
+            // 5. Create Initial Spheres
+            const sphereProperties = {
+                diameter: 2,
+                segments: 32,
+            };
+
+            const materials = [
+                new BABYLON.StandardMaterial("material1", scene),
+                new BABYLON.StandardMaterial("material2", scene),
+                new BABYLON.StandardMaterial("material3", scene)
+            ];
+
+            materials[0].diffuseColor = new BABYLON.Color3(1, 0, 0); // Red
+            materials[1].diffuseColor = new BABYLON.Color3(0, 1, 0); // Green
+            materials[2].diffuseColor = new BABYLON.Color3(0, 0, 1); // Blue
+
+            const positions = [
+                new BABYLON.Vector3(0, 0, 0),
+                new BABYLON.Vector3(0, 2, 0),
+                new BABYLON.Vector3(2, 0, 0)
+            ];
+
+            for (let i = 0; i < 3; i++) {
+                const sphere = BABYLON.MeshBuilder.CreateSphere("sphere" + i, sphereProperties, scene);
+                sphere.position = positions[i];
+                sphere.material = materials[i];
+            }
+
+            // Load the Stanford Bunny OBJ Model
+            BABYLON.SceneLoader.ImportMesh(
+                "",                        // No name filter; load all meshes
+                "./",                      // Path to the folder where .obj and .mtl are located
+                "StanfordBunny.obj",       // Name of the OBJ file
+                scene,                     // The scene to import into
+                function (meshes) {        // Callback once loaded
+                    alert("Stanford Bunny loaded with " + meshes.length + " meshes.");
+                    // Position and scale the loaded model
+                    meshes.forEach(mesh => {
+                        mesh.position = new BABYLON.Vector3(0, 0, 0);
+                        mesh.scaling = new BABYLON.Vector3(2, 2, 2); // Scale by factor of 2
+                    });
+                },
+                null,                      // Progress function (optional)
+                function (scene, message, exception) { // Error callback
+                    console.error("Error loading StanfordBunny.obj:", message, exception);
+                }
+            );
+
+            // --------------------------
+            // Creative Changes
+            // --------------------------
+
+            // 1. Add Realistic Fog Effect to the Scene
+            scene.fogMode = BABYLON.Scene.FOGMODE_EXP;
+            scene.fogDensity = 0.02;
+            scene.fogColor = new BABYLON.Color3(0.9, 0.9, 0.85);
+
+            // 2. Introduce Day-Night Cycle
+            sun = new BABYLON.DirectionalLight("sun", new BABYLON.Vector3(-1, -2, -1), scene);
+            sun.intensity = 0.8;
+            sun.position = new BABYLON.Vector3(0, 50, 0); // Position the sun high above the scene
+
+            scene.registerBeforeRender(function () {
+                if (dayNightCycleActive) {
+                    const time = performance.now() * 0.0001; // Use time to change intensity
+                    sun.intensity = 0.8 + 0.2 * Math.sin(time);
+                    sun.direction = new BABYLON.Vector3(Math.sin(time), -1, Math.cos(time)).normalize();
+                }
+            });
+
+            // 3. Add Water Plane with Reflection
+            waterPlane = BABYLON.MeshBuilder.CreateGround("waterPlane", { width: 30, height: 30 }, scene);
+            const waterMaterial = new BABYLON.WaterMaterial("waterMaterial", scene);
+            waterMaterial.bumpTexture = new BABYLON.Texture("https://assets.babylonjs.com/textures/waterbump.png", scene);
+            waterMaterial.windForce = 10;
+            waterMaterial.waveHeight = 0.2;
+            waterMaterial.bumpHeight = 0.1;
+            waterMaterial.waveLength = 0.1;
+            waterMaterial.colorBlendFactor = 0;
+            waterPlane.material = waterMaterial;
+            waterPlane.position.y = -1;
+
+            // 4. Interactive Object: Clickable Sphere Changes Color
+            interactiveSphere = BABYLON.MeshBuilder.CreateSphere("interactiveSphere", { diameter: 1 }, scene);
+            interactiveSphere.position = new BABYLON.Vector3(2, 1, 2);
+            interactiveSphere.material = new BABYLON.StandardMaterial("interactiveMaterial", scene);
+            interactiveSphere.material.diffuseColor = new BABYLON.Color3(1, 1, 1);
+
+            interactiveSphere.actionManager = new BABYLON.ActionManager(scene);
+            interactiveSphere.actionManager.registerAction(
+                new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnPickTrigger, function () {
+                    interactiveSphere.material.diffuseColor = new BABYLON.Color3(Math.random(), Math.random(), Math.random());
+                })
+            );
+
+            // 5. Add a Skybox
+            skybox = BABYLON.MeshBuilder.CreateBox("skyBox", { size: 1000.0 }, scene);
+            const skyboxMaterial = new BABYLON.StandardMaterial("skyBoxMaterial", scene);
+            skyboxMaterial.backFaceCulling = false;
+            skyboxMaterial.reflectionTexture = new BABYLON.CubeTexture("https://assets.babylonjs.com/environments/skybox", scene);
+            skyboxMaterial.reflectionTexture.coordinatesMode = BABYLON.Texture.SKYBOX_MODE;
+            skyboxMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
+            skyboxMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+            skybox.material = skyboxMaterial;
+
+            return scene;
+        };
+
+        // Create the scene
+        const scene = createScene();
+
+        // Run the render loop
+        engine.runRenderLoop(function () {
+            scene.render();
+        });
+
+        // Handle browser resizing
+        window.addEventListener("resize", function () {
+            engine.resize();
+        });
+
+        // --------------------------
+        // Button Functionality
+        // --------------------------
+
+        // 1. Export the scene as GLB
+        function exportToGLB() {
+            BABYLON.GLTF2Export.GLBAsync(scene, "stickman.glb").then((glb) => {
+                glb.downloadFiles();
+            }).catch((error) => {
+                console.error("Error exporting GLB:", error);
+            });
+        }
+
+        document.getElementById("downloadButton").addEventListener("click", exportToGLB);
+
+        // 2. Toggle Fog Effect
+        let fogEnabled = true;
+        document.getElementById("toggleFog").addEventListener("click", function() {
+            fogEnabled = !fogEnabled;
+            if (fogEnabled) {
+                scene.fogMode = BABYLON.Scene.FOGMODE_EXP;
+                scene.fogDensity = 0.02;
+                scene.fogColor = new BABYLON.Color3(0.9, 0.9, 0.85);
+                console.log("Fog Enabled");
+            } else {
+                scene.fogMode = BABYLON.Scene.FOGMODE_NONE;
+                console.log("Fog Disabled");
+            }
+        });
+
+        // 3. Toggle Day-Night Cycle
+        document.getElementById("toggleDayNight").addEventListener("click", function() {
+            dayNightCycleActive = !dayNightCycleActive;
+            console.log("Day-Night Cycle " + (dayNightCycleActive ? "Enabled" : "Disabled"));
+        });
+
+        // 4. Toggle Water Plane
+        let waterEnabled = true;
+        document.getElementById("toggleWater").addEventListener("click", function() {
+            waterEnabled = !waterEnabled;
+            waterPlane.setEnabled(waterEnabled);
+            waterPlane.setVisible(waterEnabled);
+            console.log("Water Plane " + (waterEnabled ? "Shown" : "Hidden"));
+        });
+
+        // 5. Toggle Interactive Sphere
+        let sphereEnabled = true;
+        document.getElementById("toggleSphere").addEventListener("click", function() {
+            sphereEnabled = !sphereEnabled;
+            interactiveSphere.setEnabled(sphereEnabled);
+            interactiveSphere.setVisible(sphereEnabled);
+            console.log("Interactive Sphere " + (sphereEnabled ? "Shown" : "Hidden"));
+        });
+
+        // 6. Toggle Skybox
+        let skyboxEnabled = true;
+        document.getElementById("toggleSkybox").addEventListener("click", function() {
+            skyboxEnabled = !skyboxEnabled;
+            skybox.setEnabled(skyboxEnabled);
+            skybox.setVisible(skyboxEnabled);
+            console.log("Skybox " + (skyboxEnabled ? "Shown" : "Hidden"));
+        });
+    </script>
+</body>
+</html>
